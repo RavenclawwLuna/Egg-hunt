@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Egg Hunt Rooms</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --ui:#e8ecff;
+      --ui2:#9aa6ff;
+      --shadow: rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 700px at 50% 20%, #1a2a66 0%, #0b1020 55%, #070a14 100%);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color:var(--ui);
+      display:flex;
+      justify-content:center;
+      padding:16px;
+    }
+    .wrap{
+      width:min(980px, 100%);
+      display:grid;
+      gap:12px;
+    }
+    .topbar{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 18px;
+      padding: 10px 14px;
+      box-shadow: 0 10px 30px var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .title{
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .title b{font-size:16px}
+    .title span{font-size:12px; color:var(--ui2)}
+    .hud{
+      display:flex; gap:12px; align-items:center; font-size:13px;
+      color:var(--ui);
+    }
+    .pill{
+      padding:6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    canvas{
+      width:100%;
+      height:auto;
+      aspect-ratio: 16/9;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 16px 50px var(--shadow);
+      display:block;
+    }
+    .help{
+      font-size:12px;
+      color: var(--ui2);
+      padding: 0 6px;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .toast{
+      position:fixed;
+      left:50%;
+      bottom:18px;
+      transform:translateX(-50%);
+      padding:10px 14px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.55);
+      border: 1px solid rgba(255,255,255,.14);
+      color: #fff;
+      font-size: 13px;
+      opacity:0;
+      pointer-events:none;
+      transition: .25s ease;
+    }
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="title">
+        <b>Egg Hunt Rooms 🥚</b>
+        <span>Walk to edges to change rooms • Click hidden spots to find eggs</span>
+      </div>
+      <div class="hud">
+        <div class="pill" id="roomPill">Room: 1</div>
+        <div class="pill" id="eggPill">Eggs: 0 / 10</div>
+      </div>
+    </div>
+
+    <canvas id="game" width="960" height="540"></canvas>
+
+    <div class="help">
+      <div>Controls: <b>A/D</b> or <b>←/→</b> move • <b>W</b>/<b>↑</b>/<b>Space</b> jump • <b>Click</b> to search spots</div>
+      <div>Tip: eggs are hidden in “weird” clickable spots 👀</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+
+  const roomPill = document.getElementById("roomPill");
+  const eggPill = document.getElementById("eggPill");
+  const toastEl = document.getElementById("toast");
+
+  const W = canvas.width, H = canvas.height;
+
+  // ---------- helpers ----------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const aabb = (ax,ay,aw,ah, bx,by,bw,bh) =>
+    ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
+
+  let toastTimer = 0;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    toastTimer = 90;
+  }
+
+  // ---------- game state ----------
+  const totalEggs = 10;
+  const found = new Set(); // egg ids
+  let roomIndex = 0;
+
+  const keys = {};
+  addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+  addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+  // ---------- rooms ----------
+  // Platforms: {x,y,w,h}
+  // Click spots: {x,y,r, eggId, hint, found:boolean}
+  const rooms = [
+    {
+      name:"Moon Meadow",
+      sky1:"#1a2a66", sky2:"#0b1020",
+      decor:"stars",
+      platforms:[
+        {x:0,y:H-60,w:W,h:60},
+        {x:90,y:360,w:260,h:22},
+        {x:420,y:280,w:180,h:22},
+        {x:680,y:360,w:200,h:22},
+      ],
+      spots:[
+        {x:150,y:H-88,r:18,eggId:"egg1",hint:"You found an egg near the grass!"},
+        {x:520,y:255,r:16,eggId:"egg2",hint:"An egg was tucked under a ledge!"},
+      ]
+    },
+    {
+      name:"Candy Cavern",
+      sky1:"#3a0d3d", sky2:"#120014",
+      decor:"bubbles",
+      platforms:[
+        {x:0,y:H-60,w:W,h:60},
+        {x:120,y:410,w:220,h:22},
+        {x:360,y:330,w:220,h:22},
+        {x:650,y:250,w:220,h:22},
+      ],
+      spots:[
+        {x:735,y:225,r:16,eggId:"egg3",hint:"Egg found in the candy glow!"},
+        {x:210,y:388,r:18,eggId:"egg4",hint:"Egg found near a sticky platform!"},
+      ]
+    },
+    {
+      name:"Library Loft",
+      sky1:"#163d3f", sky2:"#07181a",
+      decor:"books",
+      platforms:[
+        {x:0,y:H-60,w:W,h:60},
+        {x:120,y:300,w:260,h:22},
+        {x:420,y:360,w:180,h:22},
+        {x:700,y:320,w:200,h:22},
+        {x:480,y:210,w:150,h:22},
+      ],
+      spots:[
+        {x:505,y:186,r:16,eggId:"egg5",hint:"Egg found on a quiet shelf!"},
+        {x:860,y:H-88,r:18,eggId:"egg6",hint:"Egg found in a dusty corner!"},
+      ]
+    },
+    {
+      name:"Cloud Rooftops",
+      sky1:"#1a3b6a", sky2:"#0b0f20",
+      decor:"clouds",
+      platforms:[
+        {x:0,y:H-60,w:W,h:60},
+        {x:80,y:260,w:220,h:22},
+        {x:360,y:200,w:220,h:22},
+        {x:640,y:240,w:240,h:22},
+        {x:430,y:340,w:140,h:22},
+      ],
+      spots:[
+        {x:125,y:235,r:16,eggId:"egg7",hint:"Egg found in the cloud fluff!"},
+        {x:465,y:316,r:16,eggId:"egg8",hint:"Egg found behind a rooftop bump!"},
+      ]
+    },
+    {
+      name:"Final Grove",
+      sky1:"#2c1a4f", sky2:"#0a0714",
+      decor:"fireflies",
+      platforms:[
+        {x:0,y:H-60,w:W,h:60},
+        {x:120,y:380,w:220,h:22},
+        {x:380,y:310,w:200,h:22},
+        {x:620,y:260,w:220,h:22},
+        {x:760,y:400,w:160,h:22},
+      ],
+      spots:[
+        {x:790,y:375,r:16,eggId:"egg9",hint:"Egg found near the grove steps!"},
+        {x:420,y:H-88,r:18,eggId:"egg10",hint:"The last egg was hiding in plain sight!"},
+      ]
+    }
+  ];
+
+  // ---------- player ----------
+  const p = {
+    x: 80, y: H-140,
+    w: 32, h: 44,
+    vx: 0, vy: 0,
+    onGround: false,
+    face: 1
+  };
+
+  function resetPlayerEdge(side){
+    // side: -1 (entered from left), +1 (entered from right)
+    p.vx = 0; p.vy = 0;
+    p.y = H-140;
+    p.x = (side === -1) ? 30 : (W - 60);
+  }
+
+  function setRoom(i, side){
+    roomIndex = (i + rooms.length) % rooms.length;
+    roomPill.textContent = `Room: ${roomIndex+1}`;
+    toast(`Entered: ${rooms[roomIndex].name}`);
+    resetPlayerEdge(side);
+  }
+
+  function updateHUD(){
+    eggPill.textContent = `Eggs: ${found.size} / ${totalEggs}`;
+    if(found.size === totalEggs){
+      toast("YOU FOUND ALL 10 EGGS!! 🥚✨");
+    }
+  }
+
+  // ---------- click searching ----------
+  canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    const r = rooms[roomIndex];
+    let hit = false;
+
+    for(const s of r.spots){
+      const dx = mx - s.x, dy = my - s.y;
+      if(dx*dx + dy*dy <= s.r*s.r){
+        hit = true;
+        if(found.has(s.eggId)){
+          toast("Already found this egg spot!");
+        }else{
+          found.add(s.eggId);
+          toast(s.hint);
+          updateHUD();
+        }
+      }
+    }
+
+    if(!hit){
+      // little feedback so it feels like searching
+      toast("Nothing here... keep looking 👀");
+    }
+  });
+
+  // ---------- physics ----------
+  const GRAV = 0.55;
+  const MOVE = 0.9;
+  const MAXS = 5.2;
+  const JUMP = 11.5;
+  const FRICTION = 0.80;
+
+  function step(){
+    // input
+    const left = keys["a"] || keys["arrowleft"];
+    const right = keys["d"] || keys["arrowright"];
+    const jump = keys["w"] || keys["arrowup"] || keys[" "];
+
+    if(left){ p.vx -= MOVE; p.face = -1; }
+    if(right){ p.vx += MOVE; p.face = 1; }
+
+    p.vx = clamp(p.vx, -MAXS, MAXS);
+
+    if(p.onGround && jump){
+      p.vy = -JUMP;
+      p.onGround = false;
+    }
+
+    // gravity
+    p.vy += GRAV;
+    p.vy = clamp(p.vy, -50, 16);
+
+    // apply
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // friction on ground
+    if(p.onGround) p.vx *= FRICTION;
+    else p.vx *= 0.98;
+
+    // collisions
+    p.onGround = false;
+    const plats = rooms[roomIndex].platforms;
+
+    // simple axis separation
+    // resolve Y
+    for(const pl of plats){
+      if(aabb(p.x, p.y, p.w, p.h, pl.x, pl.y, pl.w, pl.h)){
+        // coming from above
+        if(p.vy > 0 && p.y + p.h - p.vy <= pl.y + 2){
+          p.y = pl.y - p.h;
+          p.vy = 0;
+          p.onGround = true;
+        }
+        // hitting head
+        else if(p.vy < 0 && p.y - p.vy >= pl.y + pl.h - 2){
+          p.y = pl.y + pl.h;
+          p.vy = 0;
+        }
+      }
+    }
+
+    // resolve X
+    for(const pl of plats){
+      if(aabb(p.x, p.y, p.w, p.h, pl.x, pl.y, pl.w, pl.h)){
+        if(p.vx > 0){
+          p.x = pl.x - p.w;
+          p.vx = 0;
+        }else if(p.vx < 0){
+          p.x = pl.x + pl.w;
+          p.vx = 0;
+        }
+      }
+    }
+
+    // room transitions
+    if(p.x + p.w < -10){
+      setRoom(roomIndex - 1, +1);
+    }
+    if(p.x > W + 10){
+      setRoom(roomIndex + 1, -1);
+    }
+
+    // keep within y
+    if(p.y > H + 200){
+      toast("Oops! You fell. Try again!");
+      resetPlayerEdge(-1);
+    }
+
+    // toast timer
+    if(toastTimer > 0){
+      toastTimer--;
+      if(toastTimer === 0) toastEl.classList.remove("show");
+    }
+  }
+
+  // ---------- draw ----------
+  function drawDecor(r){
+    // background
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, r.sky1);
+    g.addColorStop(1, r.sky2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    // soft vignette
+    const vg = ctx.createRadialGradient(W/2,H/2, 100, W/2,H/2, 520);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, "rgba(0,0,0,.45)");
+    ctx.fillStyle = vg;
+    ctx.fillRect(0,0,W,H);
+
+    // decor
+    if(r.decor === "stars"){
+      for(let i=0;i<55;i++){
+        const x = (i*173)%W;
+        const y = (i*91)%240;
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = "white";
+        ctx.fillRect(x,y,2,2);
+      }
+      ctx.globalAlpha = 1;
+    }else if(r.decor === "bubbles"){
+      for(let i=0;i<22;i++){
+        const x = (i*211)%W;
+        const y = 60 + (i*77)%320;
+        const rad = 6 + (i%6)*2;
+        ctx.globalAlpha = 0.18;
+        ctx.beginPath();
+        ctx.arc(x,y,rad,0,Math.PI*2);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }else if(r.decor === "books"){
+      ctx.globalAlpha = 0.20;
+      for(let i=0;i<12;i++){
+        const x = 40 + i*75;
+        const y = 70 + (i%3)*22;
+        ctx.fillStyle = "white";
+        ctx.fillRect(x,y,50,12);
+      }
+      ctx.globalAlpha = 1;
+    }else if(r.decor === "clouds"){
+      ctx.globalAlpha = 0.20;
+      for(let i=0;i<10;i++){
+        const x = (i*160)%W;
+        const y = 60 + (i*43)%150;
+        ctx.beginPath();
+        ctx.arc(x,y,26,0,Math.PI*2);
+        ctx.arc(x+24,y+8,22,0,Math.PI*2);
+        ctx.arc(x-24,y+10,20,0,Math.PI*2);
+        ctx.fillStyle = "white";
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }else if(r.decor === "fireflies"){
+      for(let i=0;i<26;i++){
+        const x = (i*199)%W;
+        const y = 90 + (i*83)%360;
+        ctx.globalAlpha = 0.18 + (Math.sin((Date.now()/350)+i)*0.12);
+        ctx.beginPath();
+        ctx.arc(x,y,3,0,Math.PI*2);
+        ctx.fillStyle = "rgba(255,255,180,1)";
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // room title faint
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = "white";
+    ctx.font = "700 36px ui-sans-serif, system-ui";
+    ctx.fillText(r.name, 22, 54);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPlatforms(r){
+    for(const pl of r.platforms){
+      // platform body
+      ctx.fillStyle = "rgba(255,255,255,.12)";
+      ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+
+      // highlight top edge
+      ctx.fillStyle = "rgba(255,255,255,.18)";
+      ctx.fillRect(pl.x, pl.y, pl.w, 4);
+    }
+  }
+
+  function drawPlayer(){
+    // shadow
+    ctx.globalAlpha = 0.25;
+    ctx.beginPath();
+    ctx.ellipse(p.x + p.w/2, p.y + p.h + 8, 16, 6, 0, 0, Math.PI*2);
+    ctx.fillStyle = "black";
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // body
+    ctx.fillStyle = "rgba(255,255,255,.90)";
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+
+    // face
+    ctx.fillStyle = "rgba(0,0,0,.55)";
+    const fx = p.face === 1 ? p.x + 20 : p.x + 8;
+    ctx.fillRect(fx, p.y + 14, 4, 4);
+    ctx.fillRect(fx + 6, p.y + 14, 4, 4);
+
+    // blush
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "hotpink";
+    ctx.fillRect(p.x + 6, p.y + 24, 6, 3);
+    ctx.fillRect(p.x + p.w - 12, p.y + 24, 6, 3);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawEggCounterHint(){
+    // subtle edge arrows
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = "white";
+    ctx.font = "700 18px ui-sans-serif, system-ui";
+    ctx.fillText("← edge", 18, H-18);
+    ctx.fillText("edge →", W-86, H-18);
+    ctx.globalAlpha = 1;
+  }
+
+  function draw(){
+    const r = rooms[roomIndex];
+    drawDecor(r);
+    drawPlatforms(r);
+    drawEggCounterHint();
+
+    // NOTE: eggs are hidden (not drawn). But we can draw tiny sparkles sometimes.
+    // (keeps it “click hunt” while still giving vibe)
+    ctx.globalAlpha = 0.12;
+    for(const s of r.spots){
+      if(!found.has(s.eggId)){
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 2, 0, Math.PI*2);
+        ctx.fillStyle = "white";
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    drawPlayer();
+
+    // win overlay
+    if(found.size === totalEggs){
+      ctx.globalAlpha = 0.75;
+      ctx.fillStyle = "rgba(0,0,0,.45)";
+      ctx.fillRect(0,0,W,H);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "white";
+      ctx.font = "800 44px ui-sans-serif, system-ui";
+      ctx.fillText("ALL EGGS FOUND!", 240, 250);
+      ctx.font = "600 18px ui-sans-serif, system-ui";
+      ctx.globalAlpha = 0.9;
+      ctx.fillText("You did it 🥚✨ (You can still walk around rooms)", 265, 290);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---------- loop ----------
+  function loop(){
+    step();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // init
+  updateHUD();
+  setRoom(0, -1);
+  toast("Find all 10 eggs by clicking hidden spots!");
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
