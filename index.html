@@ -6,7 +6,6 @@
   <title>Egg Hunt Rooms</title>
   <style>
     :root{
-      --bg:#0b1020;
       --ui:#e8ecff;
       --ui2:#9aa6ff;
       --shadow: rgba(0,0,0,.35);
@@ -38,31 +37,20 @@
       box-shadow: 0 10px 30px var(--shadow);
       backdrop-filter: blur(10px);
     }
-    .title{
-      display:flex; flex-direction:column; gap:2px;
-    }
+    .title{display:flex; flex-direction:column; gap:2px;}
     .title b{font-size:16px}
     .title span{font-size:12px; color:var(--ui2)}
-    .hud{
-      display:flex; gap:12px; align-items:center; font-size:13px;
-      color:var(--ui);
-      flex-wrap:wrap;
-      justify-content:flex-end;
-    }
+    .hud{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end;}
     .pill{
       padding:6px 10px;
       border-radius: 999px;
       background: rgba(255,255,255,.08);
       border: 1px solid rgba(255,255,255,.12);
-      display:flex;
-      gap:8px;
-      align-items:center;
-      white-space:nowrap;
+      font-size:13px;
+      display:flex; gap:8px; align-items:center;
     }
     .eggbar{
-      display:flex;
-      gap:4px;
-      align-items:center;
+      display:flex; gap:4px; align-items:center;
       padding:6px 10px;
       border-radius: 999px;
       background: rgba(255,255,255,.08);
@@ -79,12 +67,10 @@
       background: rgba(255,255,255,.92);
       border-color: rgba(255,255,255,.7);
     }
-
     canvas{
       width:100%;
       height:auto;
       aspect-ratio: 16/9;
-      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
       border-radius: 22px;
       border: 1px solid rgba(255,255,255,.10);
       box-shadow: 0 16px 50px var(--shadow);
@@ -122,20 +108,20 @@
     <div class="topbar">
       <div class="title">
         <b>Egg Hunt Rooms 🥚</b>
-        <span>Walk to edges to change rooms • Click hidden spots to find eggs</span>
+        <span>Walk to edges to change rooms • Click eggs to collect</span>
       </div>
       <div class="hud">
         <div class="pill" id="roomPill">Room: 1</div>
         <div class="pill" id="eggPill">Eggs: 0 / 10</div>
-        <div class="eggbar" id="eggBar" aria-label="Egg progress bar"></div>
+        <div class="eggbar" id="eggBar"></div>
       </div>
     </div>
 
     <canvas id="game" width="960" height="540"></canvas>
 
     <div class="help">
-      <div>Controls: <b>A/D</b> or <b>←/→</b> move • <b>W</b>/<b>↑</b>/<b>Space</b> jump • <b>Click</b> to search spots</div>
-      <div>Tip: eggs are hidden in “weird” clickable spots 👀</div>
+      <div>Controls: <b>A/D</b> or <b>←/→</b> move • <b>W</b>/<b>↑</b>/<b>Space</b> jump • <b>Click</b> eggs</div>
+      <div>Tip: eggs are visible now! explore each room ✨</div>
     </div>
   </div>
 
@@ -153,7 +139,6 @@
 
   const W = canvas.width, H = canvas.height;
 
-  // ---------- helpers ----------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const aabb = (ax,ay,aw,ah, bx,by,bw,bh) =>
     ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
@@ -165,16 +150,15 @@
     toastTimer = 90;
   }
 
-  // ---------- game state ----------
   const totalEggs = 10;
-  const found = new Set(); // egg ids
+  const found = new Set();
   let roomIndex = 0;
 
   const keys = {};
   addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
   addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-  // ---------- rooms ----------
+  // LOWER + MORE REACHABLE PLATFORMS
   const rooms = [
     {
       name:"Moon Meadow",
@@ -182,13 +166,13 @@
       decor:"stars",
       platforms:[
         {x:0,y:H-60,w:W,h:60},
-        {x:90,y:360,w:260,h:22},
-        {x:420,y:280,w:180,h:22},
-        {x:680,y:360,w:200,h:22},
+        {x:120,y:380,w:260,h:22},
+        {x:450,y:320,w:200,h:22},
+        {x:720,y:380,w:190,h:22},
       ],
-      spots:[
-        {x:150,y:H-88,r:18,eggId:"egg1",hint:"You found an egg near the grass!"},
-        {x:520,y:255,r:16,eggId:"egg2",hint:"An egg was tucked under a ledge!"},
+      eggs:[
+        {x:170,y:H-92,id:"egg1"},
+        {x:540,y:292,id:"egg2"},
       ]
     },
     {
@@ -197,13 +181,13 @@
       decor:"bubbles",
       platforms:[
         {x:0,y:H-60,w:W,h:60},
-        {x:120,y:410,w:220,h:22},
-        {x:360,y:330,w:220,h:22},
-        {x:650,y:250,w:220,h:22},
+        {x:130,y:400,w:230,h:22},
+        {x:390,y:340,w:240,h:22},
+        {x:690,y:300,w:220,h:22},
       ],
-      spots:[
-        {x:735,y:225,r:16,eggId:"egg3",hint:"Egg found in the candy glow!"},
-        {x:210,y:388,r:18,eggId:"egg4",hint:"Egg found near a sticky platform!"},
+      eggs:[
+        {x:220,y:372,id:"egg3"},
+        {x:790,y:272,id:"egg4"},
       ]
     },
     {
@@ -212,14 +196,14 @@
       decor:"books",
       platforms:[
         {x:0,y:H-60,w:W,h:60},
-        {x:120,y:300,w:260,h:22},
-        {x:420,y:360,w:180,h:22},
-        {x:700,y:320,w:200,h:22},
-        {x:480,y:210,w:150,h:22},
+        {x:120,y:360,w:260,h:22},
+        {x:430,y:390,w:180,h:22},
+        {x:700,y:350,w:200,h:22},
+        {x:470,y:290,w:160,h:22},
       ],
-      spots:[
-        {x:505,y:186,r:16,eggId:"egg5",hint:"Egg found on a quiet shelf!"},
-        {x:860,y:H-88,r:18,eggId:"egg6",hint:"Egg found in a dusty corner!"},
+      eggs:[
+        {x:520,y:262,id:"egg5"},
+        {x:850,y:H-92,id:"egg6"},
       ]
     },
     {
@@ -228,14 +212,14 @@
       decor:"clouds",
       platforms:[
         {x:0,y:H-60,w:W,h:60},
-        {x:80,y:260,w:220,h:22},
-        {x:360,y:200,w:220,h:22},
-        {x:640,y:240,w:240,h:22},
-        {x:430,y:340,w:140,h:22},
+        {x:90,y:340,w:240,h:22},
+        {x:380,y:300,w:240,h:22},
+        {x:670,y:330,w:240,h:22},
+        {x:450,y:410,w:140,h:22},
       ],
-      spots:[
-        {x:125,y:235,r:16,eggId:"egg7",hint:"Egg found in the cloud fluff!"},
-        {x:465,y:316,r:16,eggId:"egg8",hint:"Egg found behind a rooftop bump!"},
+      eggs:[
+        {x:170,y:312,id:"egg7"},
+        {x:480,y:382,id:"egg8"},
       ]
     },
     {
@@ -244,26 +228,27 @@
       decor:"fireflies",
       platforms:[
         {x:0,y:H-60,w:W,h:60},
-        {x:120,y:380,w:220,h:22},
-        {x:380,y:310,w:200,h:22},
-        {x:620,y:260,w:220,h:22},
-        {x:760,y:400,w:160,h:22},
+        {x:140,y:390,w:240,h:22},
+        {x:410,y:340,w:220,h:22},
+        {x:670,y:310,w:230,h:22},
+        {x:770,y:410,w:160,h:22},
       ],
-      spots:[
-        {x:790,y:375,r:16,eggId:"egg9",hint:"Egg found near the grove steps!"},
-        {x:420,y:H-88,r:18,eggId:"egg10",hint:"The last egg was hiding in plain sight!"},
+      eggs:[
+        {x:820,y:382,id:"egg9"},
+        {x:450,y:H-92,id:"egg10"},
       ]
     }
   ];
 
-  // ---------- player (CUTER) ----------
+  // CUTER PLAYER (BUNNY BLOB)
   const p = {
     x: 80, y: H-140,
     w: 34, h: 40,
     vx: 0, vy: 0,
     onGround: false,
     face: 1,
-    t: 0
+    t: 0,
+    coyote: 0
   };
 
   function resetPlayerEdge(side){
@@ -296,7 +281,7 @@
     }
   }
 
-  // ---------- click searching ----------
+  // CLICK EGGS (visible)
   canvas.addEventListener("click", (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -305,31 +290,32 @@
     const r = rooms[roomIndex];
     let hit = false;
 
-    for(const s of r.spots){
-      const dx = mx - s.x, dy = my - s.y;
-      if(dx*dx + dy*dy <= s.r*s.r){
+    for(const egg of r.eggs){
+      const dx = mx - egg.x, dy = my - egg.y;
+      if(dx*dx + dy*dy <= 18*18){
         hit = true;
-        if(found.has(s.eggId)){
-          toast("Already found this egg spot!");
+        if(found.has(egg.id)){
+          toast("Already collected!");
         }else{
-          found.add(s.eggId);
-          toast(s.hint);
+          found.add(egg.id);
+          toast("Egg collected!! 🥚✨");
           updateHUD();
         }
       }
     }
 
     if(!hit){
-      toast("Nothing here... keep looking 👀");
+      toast("Click directly on the egg!");
     }
   });
 
-  // ---------- physics ----------
+  // EASIER PLATFORMING
   const GRAV = 0.55;
-  const MOVE = 0.9;
-  const MAXS = 5.2;
-  const JUMP = 11.5;
-  const FRICTION = 0.80;
+  const MOVE = 0.95;
+  const MAXS = 5.5;
+  const JUMP = 13.5;     // stronger jump
+  const FRICTION = 0.82;
+  const COYOTE_MAX = 8;  // frames
 
   function step(){
     p.t += 1;
@@ -340,22 +326,25 @@
 
     if(left){ p.vx -= MOVE; p.face = -1; }
     if(right){ p.vx += MOVE; p.face = 1; }
-
     p.vx = clamp(p.vx, -MAXS, MAXS);
 
-    if(p.onGround && jump){
+    if(p.onGround) p.coyote = COYOTE_MAX;
+    else p.coyote = Math.max(0, p.coyote - 1);
+
+    if(jump && p.coyote > 0){
       p.vy = -JUMP;
       p.onGround = false;
+      p.coyote = 0;
     }
 
     p.vy += GRAV;
-    p.vy = clamp(p.vy, -50, 16);
+    p.vy = clamp(p.vy, -50, 18);
 
     p.x += p.vx;
     p.y += p.vy;
 
     if(p.onGround) p.vx *= FRICTION;
-    else p.vx *= 0.98;
+    else p.vx *= 0.985;
 
     p.onGround = false;
     const plats = rooms[roomIndex].platforms;
@@ -388,12 +377,8 @@
     }
 
     // room transitions
-    if(p.x + p.w < -10){
-      setRoom(roomIndex - 1, +1);
-    }
-    if(p.x > W + 10){
-      setRoom(roomIndex + 1, -1);
-    }
+    if(p.x + p.w < -10) setRoom(roomIndex - 1, +1);
+    if(p.x > W + 10) setRoom(roomIndex + 1, -1);
 
     if(p.y > H + 200){
       toast("Oops! You fell. Try again!");
@@ -406,7 +391,7 @@
     }
   }
 
-  // ---------- draw ----------
+  // DRAW
   function drawDecor(r){
     const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0, r.sky1);
@@ -414,14 +399,16 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,W,H);
 
-    const vg = ctx.createRadialGradient(W/2,H/2, 100, W/2,H/2, 520);
+    // vignette
+    const vg = ctx.createRadialGradient(W/2,H/2, 120, W/2,H/2, 560);
     vg.addColorStop(0, "rgba(0,0,0,0)");
     vg.addColorStop(1, "rgba(0,0,0,.45)");
     ctx.fillStyle = vg;
     ctx.fillRect(0,0,W,H);
 
+    // decor
     if(r.decor === "stars"){
-      for(let i=0;i<55;i++){
+      for(let i=0;i<60;i++){
         const x = (i*173)%W;
         const y = (i*91)%240;
         ctx.globalAlpha = 0.6;
@@ -430,7 +417,7 @@
       }
       ctx.globalAlpha = 1;
     }else if(r.decor === "bubbles"){
-      for(let i=0;i<22;i++){
+      for(let i=0;i<24;i++){
         const x = (i*211)%W;
         const y = 60 + (i*77)%320;
         const rad = 6 + (i%6)*2;
@@ -465,7 +452,7 @@
       }
       ctx.globalAlpha = 1;
     }else if(r.decor === "fireflies"){
-      for(let i=0;i<26;i++){
+      for(let i=0;i<28;i++){
         const x = (i*199)%W;
         const y = 90 + (i*83)%360;
         ctx.globalAlpha = 0.18 + (Math.sin((Date.now()/350)+i)*0.12);
@@ -477,6 +464,7 @@
       ctx.globalAlpha = 1;
     }
 
+    // room title
     ctx.globalAlpha = 0.22;
     ctx.fillStyle = "white";
     ctx.font = "700 36px ui-sans-serif, system-ui";
@@ -493,12 +481,51 @@
     }
   }
 
+  function drawEgg(x,y){
+    // cute egg
+    ctx.save();
+    ctx.translate(x,y);
+
+    // shadow
+    ctx.globalAlpha = 0.18;
+    ctx.beginPath();
+    ctx.ellipse(0, 18, 14, 5, 0, 0, Math.PI*2);
+    ctx.fillStyle = "black";
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // egg body
+    const eg = ctx.createLinearGradient(0,-18,0,18);
+    eg.addColorStop(0,"rgba(255,255,255,.98)");
+    eg.addColorStop(1,"rgba(255,255,255,.70)");
+    ctx.fillStyle = eg;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 14, 18, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // pastel stripes
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = "hotpink";
+    ctx.fillRect(-10, -4, 20, 4);
+    ctx.fillStyle = "deepskyblue";
+    ctx.fillRect(-9, 4, 18, 3);
+    ctx.globalAlpha = 1;
+
+    // outline
+    ctx.strokeStyle = "rgba(0,0,0,.18)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 14, 18, 0, 0, Math.PI*2);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
   function drawPlayer(){
-    // cute bounce
     const bob = p.onGround ? Math.sin(p.t/10)*1.5 : 0;
 
     // shadow
-    ctx.globalAlpha = 0.22;
+    ctx.globalAlpha = 0.20;
     ctx.beginPath();
     ctx.ellipse(p.x + p.w/2, p.y + p.h + 10, 18, 7, 0, 0, Math.PI*2);
     ctx.fillStyle = "black";
@@ -508,47 +535,38 @@
     const cx = p.x + p.w/2;
     const cy = p.y + p.h/2 + bob;
 
-    // body (round)
     ctx.save();
     ctx.translate(cx, cy);
 
     // ears
-    ctx.globalAlpha = 0.95;
     ctx.fillStyle = "rgba(255,255,255,.95)";
     ctx.beginPath();
-    ctx.ellipse(-10, -20, 6, 10, -0.2, 0, Math.PI*2);
-    ctx.ellipse( 10, -20, 6, 10,  0.2, 0, Math.PI*2);
+    ctx.ellipse(-10, -22, 6, 12, -0.2, 0, Math.PI*2);
+    ctx.ellipse( 10, -22, 6, 12,  0.2, 0, Math.PI*2);
     ctx.fill();
 
-    // body blob
+    // inner ear
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "hotpink";
+    ctx.beginPath();
+    ctx.ellipse(-10, -22, 3, 7, -0.2, 0, Math.PI*2);
+    ctx.ellipse( 10, -22, 3, 7,  0.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // body
+    ctx.fillStyle = "rgba(255,255,255,.95)";
     ctx.beginPath();
     ctx.ellipse(0, 0, 18, 20, 0, 0, Math.PI*2);
     ctx.fill();
-
-    // belly
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = "hotpink";
-    ctx.beginPath();
-    ctx.ellipse(0, 6, 10, 9, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
 
     // eyes
     const fx = p.face === 1 ? 4 : -4;
     ctx.fillStyle = "rgba(0,0,0,.55)";
     ctx.beginPath();
-    ctx.arc(fx-6, -3, 2.8, 0, Math.PI*2);
-    ctx.arc(fx+6, -3, 2.8, 0, Math.PI*2);
+    ctx.arc(fx-6, -3, 3, 0, Math.PI*2);
+    ctx.arc(fx+6, -3, 3, 0, Math.PI*2);
     ctx.fill();
-
-    // sparkle in eyes
-    ctx.globalAlpha = 0.75;
-    ctx.fillStyle = "white";
-    ctx.beginPath();
-    ctx.arc(fx-7, -4, 1, 0, Math.PI*2);
-    ctx.arc(fx+5, -4, 1, 0, Math.PI*2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
 
     // mouth
     ctx.strokeStyle = "rgba(0,0,0,.45)";
@@ -585,17 +603,12 @@
     drawPlatforms(r);
     drawEdgeHint();
 
-    // tiny sparkles at hidden spots (very subtle)
-    ctx.globalAlpha = 0.12;
-    for(const s of r.spots){
-      if(!found.has(s.eggId)){
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 2, 0, Math.PI*2);
-        ctx.fillStyle = "white";
-        ctx.fill();
+    // draw eggs
+    for(const egg of r.eggs){
+      if(!found.has(egg.id)){
+        drawEgg(egg.x, egg.y);
       }
     }
-    ctx.globalAlpha = 1;
 
     drawPlayer();
 
@@ -609,12 +622,11 @@
       ctx.fillText("ALL EGGS FOUND!", 240, 250);
       ctx.font = "600 18px ui-sans-serif, system-ui";
       ctx.globalAlpha = 0.9;
-      ctx.fillText("You did it 🥚✨ (You can still walk around rooms)", 265, 290);
+      ctx.fillText("You did it 🥚✨ (You can still explore)", 330, 290);
       ctx.globalAlpha = 1;
     }
   }
 
-  // ---------- loop ----------
   function loop(){
     step();
     draw();
@@ -622,10 +634,9 @@
   }
 
   // init
-  rebuildEggBar();
   updateHUD();
   setRoom(0, -1);
-  toast("Find all 10 eggs by clicking hidden spots!");
+  toast("Eggs are visible now — click them to collect!");
   requestAnimationFrame(loop);
 })();
 </script>
